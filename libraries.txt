@@ -1,0 +1,37 @@
+# Required Arduino Libraries for VAKIO Custom Firmware
+# Install via Arduino IDE: Sketch → Include Library → Manage Libraries
+#
+# Or use PlatformIO: pio run
+
+# OLED Display Library
+U8g2 by oliverwienand (v2.35.0 or later)
+https://github.com/olikraus/u8g2
+
+# MQTT Client Library
+PubSubClient by Nick O'Leary (v2.8 or later)
+https://github.com/knolleary/pubsubclient
+
+# IR Remote Control Library
+IRremote by shirriff (v4.0.0 or later)
+https://github.com/Arduino-IRremote/Arduino-IRremote
+
+# ============================================================================
+# Installation Instructions
+# ============================================================================
+# 
+# Arduino IDE:
+#   1. Open Arduino IDE
+#   2. Go to: Sketch → Include Library → Manage Libraries
+#   3. Search and install:
+#      - "U8g2" by oliverwienand
+#      - "PubSubClient" by Nick O'Leary  
+#      - "IRremote" by shirriff
+#
+# PlatformIO:
+#   1. Install PlatformIO: https://platformio.org/install
+#   2. Run: pio run
+#   3. Upload: pio run -t upload
+#
+# Arduino CLI:
+#   arduino-cli lib install "U8g2" "PubSubClient" "IRremote"
+# ============================================================================

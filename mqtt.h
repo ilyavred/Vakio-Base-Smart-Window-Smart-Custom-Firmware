@@ -44,6 +44,7 @@ private:
   String topicPrefix;
   VakioState state;
   VakioState lastPublishedState;
+  VakioWorkMode lastActiveWorkmode;
   uint8_t lastUserSpeed = 1;
   unsigned long lastPublishTime = 0;
   static const unsigned long PUBLISH_INTERVAL_MS = 1000;
@@ -169,7 +170,7 @@ private:
   }
 
 public:
-  MqttManager(PubSubClient* mqttClient) : client(mqttClient), onStateChange(nullptr) {
+  MqttManager(PubSubClient* mqttClient) : client(mqttClient), onStateChange(nullptr), lastActiveWorkmode(WORKMODE_INFLOW) {
     topicPrefix = "vakio";  // Default
   }
 
@@ -375,12 +376,15 @@ public:
     publishAllState();
   }
 
-  void restoreState(VakioWorkMode mode, uint8_t speed) {
+  void restoreState(VakioWorkMode mode, uint8_t speed, bool powerOn = true) {
     // This function should be called ONCE at boot.
     // It sets the initial state without publishing.
 
     state.workmode = mode;
-    state.powerOn = (mode != WORKMODE_OFF);
+    state.powerOn = powerOn && (mode != WORKMODE_OFF);
+    if (mode != WORKMODE_OFF) {
+      lastActiveWorkmode = mode;
+    }
 
     // The 'speed' from storage is our best guess for the user's last preferred speed.
     lastUserSpeed = speed; 
@@ -405,11 +409,18 @@ public:
     if (on == state.powerOn) return;
 
     if (on) {
-      if (state.workmode == WORKMODE_OFF) {
-        setWorkmode(WORKMODE_INFLOW);
+      VakioWorkMode target = state.workmode;
+      if (target == WORKMODE_OFF) {
+        target = (lastActiveWorkmode != WORKMODE_OFF) ? lastActiveWorkmode : WORKMODE_INFLOW;
       }
+      setWorkmode(target);
     } else {
-        setWorkmode(WORKMODE_OFF);
+      VakioState oldState = state;
+      state.powerOn = false;
+      if (state.powerOn != oldState.powerOn) {
+        publishAllState();
+        notifyStateChange();
+      }
     }
   }
 
@@ -431,6 +442,9 @@ public:
 
     // Now set the mode and power
     state.workmode = mode;
+    if (mode != WORKMODE_OFF) {
+      lastActiveWorkmode = mode;
+    }
     state.powerOn = (mode != WORKMODE_OFF);
     
     if (state.workmode != oldState.workmode || state.powerOn != oldState.powerOn || state.speed != oldState.speed) {

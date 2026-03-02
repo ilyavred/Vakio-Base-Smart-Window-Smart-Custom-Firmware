@@ -273,7 +273,7 @@ void turnOffDevice() {
 // Включение устройства
 void turnOnDevice() {
   deviceOff = false;
-  mqttMgr.setWorkmode(WORKMODE_INFLOW);
+  mqttMgr.setPower(true);
   displayControllerWake(&displayCtrl);
   updateButtonLeds();
   // Serial.println("Device turned ON");
@@ -654,9 +654,9 @@ void setup() {
   VakioWorkMode savedMode = (VakioWorkMode)cfg.last_workmode;
   if (DEVICE_STARTS_OFF) {
     deviceOff = true;
-    mqttMgr.restoreState(WORKMODE_OFF, cfg.last_speed);
+    mqttMgr.restoreState(savedMode, cfg.last_speed, false);
   } else if (savedMode != WORKMODE_OFF) {
-    mqttMgr.restoreState(savedMode, cfg.last_speed);
+    mqttMgr.restoreState(savedMode, cfg.last_speed, true);
   }
 
   buttonPanelInit(&buttonState);

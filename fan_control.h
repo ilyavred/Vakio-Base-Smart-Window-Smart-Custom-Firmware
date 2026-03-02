@@ -268,6 +268,16 @@ static void fanRequest(bool inflow, uint8_t speed, bool maxMode = false) {
 
   uint8_t target = fanComputePwm(speed, maxMode);
 
+  // If stepper is rotating, defer applying speed changes until rotation completes
+  if (stepperRotating) {
+    fanPendingApply = true;
+    fanPendingPwm = target;
+    fanPendingSpeed = speed;
+    fanPendingMaxMode = maxMode;
+    digitalWrite(PIN_FAN_POWER, HIGH);
+    return;
+  }
+
   // If direction changed, start stepper rotation with REVERSAL
   if (inflow != fanInflow && !stepperRotating) {
     stepperTargetDirection = inflow;
