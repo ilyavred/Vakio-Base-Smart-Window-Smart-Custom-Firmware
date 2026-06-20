@@ -90,7 +90,6 @@
 // CONFIGURATION
 // ============================================================================
 
-#define WIFI_CONNECT_TIMEOUT    15000
 #define WIFI_RECONNECT_INTERVAL 30000
 #define MQTT_RECONNECT_INTERVAL 5000
 #define BUTTON_LONG_PRESS       5000
@@ -674,18 +673,6 @@ void setup() {
   if (configMgr.isConfigured()) {
     Serial.println("Found saved WiFi config, connecting...");
     wifiStartStationMode();
-
-    if (wifiConnectToWiFi()) {
-      if (configMgr.hasMQTT()) {
-        connectMQTT();
-      }
-      displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
-    } else {
-      // WiFi не удалось подключить — показываем сообщение
-      Serial.println("WiFi failed, waiting for button > to start AP");
-      currentMode = MODE_ERROR;
-      displayMgr.showMessage("WiFi Error", "Hold [>] setup");
-    }
   } else {
     // Нет сохранённой конфигурации — НЕ запускаем AP автоматически
     Serial.println("No WiFi config, waiting for button > to start AP");
@@ -779,18 +766,7 @@ void loop() {
       // Если есть сохранённая конфигурация WiFi, пробуем подключиться
       if (configMgr.isConfigured()) {
         Serial.println("Trying to connect to saved WiFi...");
-    wifiStartStationMode();
-    if (!wifiConnectToWiFi()) {
-          // Не удалось - показываем сообщение об ошибке
-          Serial.println("WiFi failed, hold [>] to start AP mode");
-          currentMode = MODE_ERROR;
-          displayMgr.showMessage("WiFi Error", "Hold [>] setup");
-        } else {
-          if (configMgr.hasMQTT()) {
-            connectMQTT();
-          }
-          displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
-        }
+        wifiStartStationMode();
       } else {
         // Нет сохранённой конфигурации - показываем экран "No Config"
         Serial.println("No saved config, hold [>] to start AP mode");
@@ -801,19 +777,14 @@ void loop() {
   }
 
   // WiFi status update and reconnection
-  if (currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING) {
-    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
-    displayMgr.setWifiConnected(wifiConnected);
+  if (currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING || currentMode == MODE_ERROR) {
+    bool wasConnected = (currentMode == MODE_CONNECTED);
 
-    if (!wifiConnected) {
-      displayMgr.setMqttConnected(false);
-
-      if (millis() - lastWifiAttempt > WIFI_RECONNECT_INTERVAL) {
-        Serial.println("WiFi disconnected, reconnecting...");
-        lastWifiAttempt = millis();
-        wifiStartStationMode();
-        wifiConnectToWiFi();
+    if (wifiMaintainStationConnection() && !wasConnected) {
+      if (configMgr.hasMQTT()) {
+        connectMQTT();
       }
+      displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
     }
   }
 

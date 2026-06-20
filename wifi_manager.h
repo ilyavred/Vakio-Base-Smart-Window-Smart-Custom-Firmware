@@ -13,7 +13,6 @@ extern DeviceMode currentMode;
 extern unsigned long apModeStartTime;
 extern unsigned long lastWifiAttempt;
 extern DisplayController displayCtrl;
-void updateButtonLeds();
 
 static void wifiStartStationMode() {
   Serial.println("Starting Station mode...");
@@ -22,11 +21,16 @@ static void wifiStartStationMode() {
     webServer->stopCaptivePortal();
   }
 
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false);
   WiFi.begin(configMgr.getConfig().wifi_ssid, configMgr.getConfig().wifi_password);
   currentMode = MODE_CONNECTING;
   lastWifiAttempt = millis();
   displayMgr.setApMode(false);
+  displayMgr.setWifiConnected(false);
+  displayMgr.setMqttConnected(false);
   displayMgr.showConnecting(configMgr.getConfig().wifi_ssid);
   displayControllerWake(&displayCtrl);
 }
@@ -57,35 +61,61 @@ static void wifiStartAPMode() {
   displayControllerWake(&displayCtrl);
 }
 
-static bool wifiConnectToWiFi() {
-  unsigned long startTime = millis();
-
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - startTime > WIFI_CONNECT_TIMEOUT) {
-      Serial.println("WiFi connection timeout");
-      return false;
-    }
-    updateButtonLeds();
-    delay(100);
-    Serial.print(".");
-    displayMgr.showConnecting(configMgr.getConfig().wifi_ssid);
+static bool wifiFinishStationConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
   }
 
-  Serial.println();
-  Serial.print("Connected! IP: ");
-  Serial.println(WiFi.localIP());
+  bool becameConnected = (currentMode != MODE_CONNECTED);
+  if (becameConnected) {
+    Serial.println();
+    Serial.print("Connected! IP: ");
+    Serial.println(WiFi.localIP());
+  }
 
   currentMode = MODE_CONNECTED;
   displayMgr.setWifiConnected(true);
   displayMgr.setApMode(false);
 
-  if (webServer == nullptr) {
-    webServer = new WebServerManager(&configMgr);
+  if (becameConnected || webServer == nullptr) {
+    if (webServer == nullptr) {
+      webServer = new WebServerManager(&configMgr);
+    }
+    webServer->begin();
+    displayControllerWake(&displayCtrl);
   }
-  webServer->begin();
 
-  displayControllerWake(&displayCtrl);
   return true;
+}
+
+static bool wifiMaintainStationConnection() {
+  if (!configMgr.isConfigured()) {
+    return false;
+  }
+
+  if (wifiFinishStationConnection()) {
+    return true;
+  }
+
+  displayMgr.setWifiConnected(false);
+  displayMgr.setMqttConnected(false);
+
+  if (currentMode == MODE_CONNECTED) {
+    Serial.println("WiFi connection lost");
+    currentMode = MODE_CONNECTING;
+  }
+
+  if (currentMode != MODE_CONNECTING && currentMode != MODE_ERROR) {
+    return false;
+  }
+
+  unsigned long now = millis();
+  if (lastWifiAttempt == 0 || now - lastWifiAttempt > WIFI_RECONNECT_INTERVAL) {
+    Serial.println("WiFi not connected, retrying...");
+    wifiStartStationMode();
+  }
+
+  return false;
 }
 
 #endif // WIFI_MANAGER_H
