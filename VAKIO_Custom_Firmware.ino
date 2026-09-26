@@ -90,7 +90,6 @@
 // CONFIGURATION
 // ============================================================================
 
-#define WIFI_CONNECT_TIMEOUT    15000
 #define WIFI_RECONNECT_INTERVAL 30000
 #define MQTT_RECONNECT_INTERVAL 5000
 #define BUTTON_LONG_PRESS       5000
@@ -110,7 +109,7 @@
 #define IR_ENABLE              1
 #define IR_PRINT_RAW           0
 #define STATE_SAVE_DEBOUNCE_MS  10000 // 10 seconds to wait before saving state to flash
-#define DEVICE_STARTS_OFF      1
+#define DEVICE_STARTS_OFF      0
 
 #include "wifi_manager.h"
 #include "ir_remote.h"
@@ -655,8 +654,14 @@ void setup() {
   if (DEVICE_STARTS_OFF) {
     deviceOff = true;
     mqttMgr.restoreState(savedMode, cfg.last_speed, false);
-  } else if (savedMode != WORKMODE_OFF) {
-    mqttMgr.restoreState(savedMode, cfg.last_speed, true);
+  } else {
+    if (savedMode != WORKMODE_OFF) {
+      deviceOff = false;
+      mqttMgr.restoreState(savedMode, cfg.last_speed, true);
+    } else {
+      deviceOff = true;
+      mqttMgr.restoreState(WORKMODE_OFF, cfg.last_speed, false);
+    }
   }
 
   buttonPanelInit(&buttonState);
@@ -674,18 +679,6 @@ void setup() {
   if (configMgr.isConfigured()) {
     Serial.println("Found saved WiFi config, connecting...");
     wifiStartStationMode();
-
-    if (wifiConnectToWiFi()) {
-      if (configMgr.hasMQTT()) {
-        connectMQTT();
-      }
-      displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
-    } else {
-      // WiFi не удалось подключить — показываем сообщение
-      Serial.println("WiFi failed, waiting for button > to start AP");
-      currentMode = MODE_ERROR;
-      displayMgr.showMessage("WiFi Error", "Hold [>] setup");
-    }
   } else {
     // Нет сохранённой конфигурации — НЕ запускаем AP автоматически
     Serial.println("No WiFi config, waiting for button > to start AP");
@@ -779,18 +772,7 @@ void loop() {
       // Если есть сохранённая конфигурация WiFi, пробуем подключиться
       if (configMgr.isConfigured()) {
         Serial.println("Trying to connect to saved WiFi...");
-    wifiStartStationMode();
-    if (!wifiConnectToWiFi()) {
-          // Не удалось - показываем сообщение об ошибке
-          Serial.println("WiFi failed, hold [>] to start AP mode");
-          currentMode = MODE_ERROR;
-          displayMgr.showMessage("WiFi Error", "Hold [>] setup");
-        } else {
-          if (configMgr.hasMQTT()) {
-            connectMQTT();
-          }
-          displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
-        }
+        wifiStartStationMode();
       } else {
         // Нет сохранённой конфигурации - показываем экран "No Config"
         Serial.println("No saved config, hold [>] to start AP mode");
@@ -801,19 +783,14 @@ void loop() {
   }
 
   // WiFi status update and reconnection
-  if (currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING) {
-    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
-    displayMgr.setWifiConnected(wifiConnected);
+  if (currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING || currentMode == MODE_ERROR) {
+    bool wasConnected = (currentMode == MODE_CONNECTED);
 
-    if (!wifiConnected) {
-      displayMgr.setMqttConnected(false);
-
-      if (millis() - lastWifiAttempt > WIFI_RECONNECT_INTERVAL) {
-        Serial.println("WiFi disconnected, reconnecting...");
-        lastWifiAttempt = millis();
-        wifiStartStationMode();
-        wifiConnectToWiFi();
+    if (wifiMaintainStationConnection() && !wasConnected) {
+      if (configMgr.hasMQTT()) {
+        connectMQTT();
       }
+      displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
     }
   }
 
@@ -837,7 +814,7 @@ void loop() {
   // Periodic display update
   if (millis() - lastDisplayUpdate > DISPLAY_UPDATE_INTERVAL) {
     lastDisplayUpdate = millis();
-    if (currentMode == MODE_CONNECTED && !deviceOff) {
+    if ((currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING) && !deviceOff) {
       displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
     }
   }

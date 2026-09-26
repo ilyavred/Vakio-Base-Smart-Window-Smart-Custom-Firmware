@@ -71,14 +71,18 @@ static uint8_t displayControllerGetBrightness(const DisplayController* dc) {
 }
 
 static void displayControllerUpdateMain(DisplayController* dc, DeviceMode mode, bool deviceOff, VakioState& state) {
-  if (mode != MODE_CONNECTED && mode != MODE_AP) return;
+  if (mode != MODE_CONNECTED && mode != MODE_AP && mode != MODE_CONNECTING) return;
 
   char line1[32];
   char line2[32];
 
   if (!state.powerOn) {
     strcpy(line1, "OFF");
-    strcpy(line2, "");
+    if (mode == MODE_CONNECTING) {
+      strcpy(line2, "Connecting...");
+    } else {
+      strcpy(line2, "");
+    }
   } else {
     switch (state.workmode) {
       case WORKMODE_INFLOW:      strcpy(line1, "INFLOW"); break;
@@ -90,7 +94,12 @@ static void displayControllerUpdateMain(DisplayController* dc, DeviceMode mode, 
       case WORKMODE_NIGHT:       strcpy(line1, "NIGHT"); break;
       default:                   strcpy(line1, "---"); break;
     }
-    sprintf(line2, "Speed: %d", state.speed);
+    
+    if (mode == MODE_CONNECTING) {
+      sprintf(line2, "S:%d (Connecting)", state.speed);
+    } else {
+      sprintf(line2, "Speed: %d", state.speed);
+    }
   }
 
   if (deviceOff) {
