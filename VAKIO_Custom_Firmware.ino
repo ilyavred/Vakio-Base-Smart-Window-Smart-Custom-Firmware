@@ -109,7 +109,7 @@
 #define IR_ENABLE              1
 #define IR_PRINT_RAW           0
 #define STATE_SAVE_DEBOUNCE_MS  10000 // 10 seconds to wait before saving state to flash
-#define DEVICE_STARTS_OFF      1
+#define DEVICE_STARTS_OFF      0
 
 #include "wifi_manager.h"
 #include "ir_remote.h"
@@ -654,8 +654,14 @@ void setup() {
   if (DEVICE_STARTS_OFF) {
     deviceOff = true;
     mqttMgr.restoreState(savedMode, cfg.last_speed, false);
-  } else if (savedMode != WORKMODE_OFF) {
-    mqttMgr.restoreState(savedMode, cfg.last_speed, true);
+  } else {
+    if (savedMode != WORKMODE_OFF) {
+      deviceOff = false;
+      mqttMgr.restoreState(savedMode, cfg.last_speed, true);
+    } else {
+      deviceOff = true;
+      mqttMgr.restoreState(WORKMODE_OFF, cfg.last_speed, false);
+    }
   }
 
   buttonPanelInit(&buttonState);
@@ -808,7 +814,7 @@ void loop() {
   // Periodic display update
   if (millis() - lastDisplayUpdate > DISPLAY_UPDATE_INTERVAL) {
     lastDisplayUpdate = millis();
-    if (currentMode == MODE_CONNECTED && !deviceOff) {
+    if ((currentMode == MODE_CONNECTED || currentMode == MODE_CONNECTING) && !deviceOff) {
       displayControllerUpdateMain(&displayCtrl, currentMode, deviceOff, mqttMgr.getState());
     }
   }
